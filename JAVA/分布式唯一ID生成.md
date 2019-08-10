@@ -1,0 +1,192 @@
+# 分布式唯一ID生成
+分布式唯一ID必须满足以下条件：
+* 局部、全局唯一
+* 趋势递增
+
+## 方法一：使用数据库的auto_increment生成
+### 优点：
+1.数据库原生功能，易于使用
+2.保证唯一性
+3.保证递增性
+4.ID步长固定且可修改
+### 缺点：
+1. 如果分表，方法不再适用
+2. 可用性与扩展性难保证。数据库常用架构为 一主多从+读写分离，主库写入，从库读取。主库的写入性能与发生异常会导致意外。
+### 改进：
+增加写库，分别设置互异的初始ID与一致的步长，但仍存在写入压力。
+
+## 方法二：UUID生成
+使用UUID在本地生成，即
+
+```java
+UUID uuid = UUID.randomUUID();
+```
+
+### 优点：
+1.本地生成ID，快速
+2.扩展性好
+### 缺点：
+1.无法保证趋势递增
+2.UUID过长，查询效率低。
+### 改进：
+* 转化为两个uint64整数存储
+* 折半存储
+
+## 方法三：当前毫秒数生成
+截取当前时间的毫秒数
+### 优点：
+1.本地生成ID，快速
+2.ID趋势递增
+3.查询效率高
+### 缺点：
+1.并发量超过1000，产生重复ID (1s=1000ms，重新循环)
+
+## 方法四：Redis生成
+Redis是单线程的，也可以用生成全局唯一的ID。用Redis的原子操作 INCR 和 INCRBY 来实现。
+## 优点：
+1.依赖于数据库且性能优于数据库，灵活。
+2.数字ID天然排序。
+## 缺点：
+1.需要在项目内引入Redis组件，增加系统复杂度。
+2.工程量大
+## 方法五：SnowFlake算法
+Twitter开源的分布式ID生成算法。
+将一个long型的ID切分为以下几个部分：
+![title](https://i.loli.net/2019/06/19/5d0a3acbcb19077901.png)
+* 41 bits视作毫秒数，使用当前毫秒数填充，2<sup>41</sup>≈69年
+* 10 bits视作机器编号，5 bits是数据中心ID，5 bits是具体机器ID， 2<sup>10</sup>=1024即最多可部署1024个节点
+* 12 bits视作序列号，是当前毫秒内的计数，2<sup>12</sup>=4096个ID序号  
+
+该算法理论上每秒最多可生成1000*(2<sup>12</sup>)≈400W，完全符合分布式唯一ID的需求。
+### SnowFlake算法 JAVA实现
+```java
+public class SnowFlake{
+
+    // 系统开始时间戳
+    private final long startTime = 1487645000000L;
+
+    // 机器ID所占位数
+    private final long workIdBits = 5L;
+
+    // 数据中心ID所占位数
+    private final long dataCenterIdBits = 5L;
+
+    // 支持的最大机器ID
+    private final long maxWorkerId = -1L ^ (-1L << workIdBits);
+
+    // 支持的最大数据中心ID
+    private final long maxDataCenterId = -1L ^ (-1L << dataCenterIdBits); 
+
+    // 序列号所占位数
+    private final long sequenceBits = 12L;
+
+    // 机器ID 左移位数
+    private final long workerIdMoveBits = sequenceBits;
+
+    // 数据标识id 左移位数 (12+5)
+    private final long dataCenterIdMoveBits = sequenceBits + workerIdBits;
+
+    // 时间截向 左移位数 (5+5+12)
+    private final long timestampMoveBits = sequenceBits + workerIdBits + dataCenterIdBits;
+
+    // 生成序列号的掩码(12位所对应的最大整数值)，此处为4095 (0b111111111111=0xfff=4095)
+    private final long sequenceMask = -1L ^ (-1L << sequenceBits);
+
+
+    /**
+     * 工作机器ID(0~31)
+     */
+    private long workerId;
+
+    /**
+     * 数据中心ID(0~31)
+     */
+    private long dataCenterId;
+
+    /**
+     * 毫秒内序列(0~4095)
+     */
+    private long sequence = 0L;
+
+    /**
+     * 上次生成ID的时间截
+     */
+    private long lastTimestamp = -1L;
+
+    /**
+     * 构造函数
+     *
+     * @param workerId     工作ID (0~31)
+     * @param dataCenterId 数据中心ID (0~31)
+     */
+    public Snowflake(long workerId, long dataCenterId) {
+        if (workerId > maxWorkerId || workerId < 0) {
+            throw new IllegalArgumentException(String.format("Worker Id can't be greater than %d or less than 0", maxWorkerId));
+        }
+        if (dataCenterId > maxDataCenterId || dataCenterId < 0) {
+            throw new IllegalArgumentException(String.format("DataCenter Id can't be greater than %d or less than 0", maxDataCenterId));
+        }
+        this.workerId = workerId;
+        this.dataCenterId = dataCenterId;
+    }
+
+
+    // 线程安全获取nextID
+    public synchronized long nextId() {
+        long timestamp = currentTime();
+
+        //如果当前时间小于上一次ID生成的时间戳: 说明系统时钟回退过,应当抛出异常
+        if (timestamp < lastTimestamp) {
+            throw new RuntimeException(
+                    String.format("Clock moved backwards.  Refusing to generate id for %d milliseconds", lastTimestamp - timestamp));
+        }
+
+        //如果同一时间生成的，则进行毫秒内序列
+        if (lastTimestamp == timestamp) {
+            sequence = (sequence + 1) & sequenceMask;
+            //毫秒内序列溢出 即 序列 > 4095
+            if (sequence == 0) {
+                //阻塞到下一个毫秒,获得新的时间戳
+                timestamp = blockTillNextMillis(lastTimestamp);
+            }
+        }
+        //时间戳改变，毫秒内序列重置
+        else {
+            sequence = 0L;
+        }
+
+        //上次生成ID的时间截
+        lastTimestamp = timestamp;
+
+        //移位并通过或运算拼接64位的ID
+        return ((timestamp - startTime) << timestampMoveBits)
+                | (dataCenterId << dataCenterIdMoveBits)
+                | (workerId << workerIdMoveBits)
+                | sequence;
+    }
+
+    // 阻塞到下一个毫秒 即 直到获得新的时间戳
+    protected long blockTillNextMillis(long lastTimestamp) {
+        long timestamp = currentTime();
+        while (timestamp <= lastTimestamp) {
+            timestamp = currentTime();
+        }
+        return timestamp;
+    }
+
+    // 获得以毫秒为单位的当前时间
+    protected long currentTime() {
+        return System.currentTimeMillis();
+    }
+}
+```
+
+```java
+
+    public static void main(String[] args) {
+        Snowflake idWorker = new Snowflake(0, 0);
+        for (int i = 0; i < 100; i++) {
+            System.out.println(idWorker.nextId());
+        }
+    }
+```
