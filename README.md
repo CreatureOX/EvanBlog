@@ -11,4 +11,5 @@
   - [Spring AOP的实现原理](https://gitpress.io/c/backend-java/Spring%20AOP%E7%9A%84%E5%AE%9E%E7%8E%B0%E5%8E%9F%E7%90%86)
   - [分布式锁](https://gitpress.io/c/backend-java/%E5%88%86%E5%B8%83%E5%BC%8F%E9%94%81)
   - [分布式唯一ID生成](https://gitpress.io/c/backend-java/%E5%88%86%E5%B8%83%E5%BC%8F%E5%94%AF%E4%B8%80ID%E7%94%9F%E6%88%90)
-  - [设计模式](https://gitpress.io/c/backend-java/%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F)
+- ## [设计模式](https://gitpress.io/c/design-pattern/)  
+  - [设计模式概述](https://gitpress.io/c/design-pattern/%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F)
