@@ -1,0 +1,322 @@
+# 红黑树
+红黑树是一种特殊的二叉查找树，满足二叉查找树的特征：任意一个节点包含的键值 >= 左孩子的键值，<= 右孩子的键值。
+
+## 红黑树的特性
+1. 每个节点是红色或者是黑色
+2. 根节点是黑色
+3. 每个叶子节点是黑色(叶子节点指为NULL的叶子节点)
+4. 如果一个节点是红色，它的子节点必须是黑色
+5. 从一个节点到该节点的子孙节点的所有路径上包含相同数目的黑色节点
+
+## 左旋
+### 左旋图解
+![leftRotate.jpg](https://i.loli.net/2020/03/13/gITA7qsFVfQZ2jx.jpg)
+
+### 左旋代码
+``` c
+void leftRotate(RbRoot *root, Node *x){
+    Node *y = x->right;
+    x->right = y->left; 
+    if(y->left != NULL){
+        y->left->parent = x;
+    }
+    y->parent = x->parent;
+    if(x->parent == NULL){
+        root->node = y;
+    }else{
+        if(x->parent->left == x){
+            x->parent->left = y;
+        }else{
+            x->parent->right = y;
+        }   
+    }
+    y->left = x;
+    x->parent = y;
+}
+```
+
+## 右旋
+### 右旋图解
+![rightRotate.jpg](https://i.loli.net/2020/03/13/z8G3JXSVOsHbDuY.jpg)
+
+### 右旋代码
+``` c
+void rightRotate(RbRoot *root, Node *x){
+    Node *x = y->left;
+    y->left = x->right;
+    if(x->right != NULL){
+        x->right->parent = y;
+    }
+    x->parent = y->parent;
+    if(y->parent == NULL){
+        root->node = x;
+    }else{
+        if(y == y->parent->right){
+            y->parent->right = x;
+        }else{
+            y->parent->left = x;
+        }
+    }
+    x->right = y;
+    y->parent = x;
+}
+```
+
+``` c
+#include<stdio.h>
+#include<stdlib.h>
+
+#define TREE_TYPE int
+
+enum COLOR{
+    RED,
+    BLACK
+};
+
+typedef struct RbNode{
+    struct rbNode *left;
+    struct rbNode *right;
+    struct rbNode *parent;
+    COLOR color;
+    TREE_TYPE val;
+}Node;
+
+typedef struct RbRoot{
+    Node *node;
+}RbRoot;
+
+RbRoot* createRbTree(){
+    RbRoot *root = (RbRoot*)malloc(sizeof(RbRoot));
+    root->node = NULL;
+    return root;
+}
+
+/* 
+ *
+ *      px                         px
+ *     /                          /
+ *    x                          y                
+ *   /  \      ---------->      /   \                
+ *  lx   y                      x   ry     
+ *     /   \                  /   \
+ *    ly   ry                lx   ly  
+ *
+ *
+ */
+void leftRotate(RbRoot *root, Node *x){
+    Node *y = x->right;
+    x->right = y->left; 
+    if(y->left != NULL){
+        y->left->parent = x;
+    }
+    y->parent = x->parent;
+    if(x->parent == NULL){
+        root->node = y;
+    }else{
+        if(x->parent->left == x){
+            x->parent->left = y;
+        }else{
+            x->parent->right = y;
+        }   
+    }
+    y->left = x;
+    x->parent = y;
+}
+
+/* 
+ *
+ *        py                         py
+ *       /                          /
+ *      y                          x                
+ *     /  \      ---------->      /  \                
+ *    x   ry                     lx   y     
+ *   /  \                            /   \
+ *  lx  rx                          rx   ry  
+ *
+ *
+ */
+void rightRotate(RbRoot *root, Node *x){
+    Node *x = y->left;
+    y->left = x->right;
+    if(x->right != NULL){
+        x->right->parent = y;
+    }
+    x->parent = y->parent;
+    if(y->parent == NULL){
+        root->node = x;
+    }else{
+        if(y == y->parent->right){
+            y->parent->right = x;
+        }else{
+            y->parent->left = x;
+        }
+    }
+    x->right = y;
+    y->parent = x;
+}
+
+void insert(RbRoot *root, Node *node){
+    Node *y = NULL;
+    Node *x = root->node;
+    while(x != NULL){
+        y = x;
+        if(node->val < x->val){
+            x = x->left;
+        }else{
+            x = x->right;
+        }
+    }
+    node->parent = y;
+    if(y != NULL){
+        if(node->val < y->val){
+            y->left = node;
+        }else{
+            y->right = node;
+        }
+    }else{
+        root->node = node;
+    }
+    node->color = RED;
+    insertFixUp(root, node);
+}
+
+void insertFixUp(RbRoot *root, Node *node){
+    Node *parent, *grandparent;
+
+    // parent node exists and its color is red
+    while((tmpParent = node->parent) && tmpParent->color == RED){
+        grandparent = tmpParent->parent;
+
+        // parent node is grandparent node's left child
+        if(tmpParent == grandparent->left){
+
+            // case 1: uncle node is red
+            Node *uncle = grandparent->right;
+            if(uncle && uncle->color == RED){
+                uncle->color = BLACK;
+                parent->color = BLACK;
+                grandparent->color = RED;
+                node = grandparent;
+                continue;
+            }
+
+            // case 2: uncle node is black, current node is right child
+            if(parent->right = node){
+                Node *tmp;
+                leftRotate(root, parent);
+                tmp = parent;
+                parent = node;
+                node = tmp;
+            }
+            
+            // case 3: uncle node is black, current node is left child
+            if(parent->left == node){
+                parent->color = BLACK;
+                grandparent->color = RED;
+                rightRotate(root, grandparent);
+            }
+        }else{
+            // parent node is grandparent node's right child
+
+            // case 1: uncle node is red
+            Node *uncle = grandparent->left;
+            if(uncle && uncle->color == RED){
+                uncle->color = BLACK;
+                parent->color = BLACK;
+                grandparent->color = RED;
+                node = grandparent;
+                continue;
+            }
+
+            // case 2: uncle node is black, current node is left child
+            if(parent->left = node){
+                Node *tmp;
+                rightRotate(root, parent);
+                tmp = parent;
+                parent = node;
+                node = tmp;
+            }
+
+            // case 3: uncle node is black, current node is right child
+            if(parent->right == node){
+                parent->color = BLACK;
+                grandparent->color = RED;
+                leftRotate(root, grandparent);
+            }
+        }
+    }
+    root->node->color = BLACK;
+}
+
+void delete(RbRoot *root, Node *node){
+    Node *child, *parent;
+    enum COLOR color;
+    if((node->left != NULL) && (node->right != NULL)){
+        Node *replace = node;
+        replace = replace->right;
+        while(replace->left != NULL){
+            replace = replace->left;
+        }
+        if(node->parent != NULL){
+            if(node->parent->left == node){
+                node->parent->left = replace;
+            }else{
+                node->parent->right = replace;
+            }
+        }else{
+            root->node = replace;
+        }
+        child = replace->right;
+        tmpParent = replace->parent;
+        color = replace->color;
+        if(tmpParent == node){
+            tmpParent = replace;
+        }else{
+            if(child != NULL){
+                child->parent = tmpParent;
+            }
+            tmpParent->left = child;
+            replace->right = node->right;
+            node->right->parent = replace;
+        }
+        replace->parent = node->parent;
+        replace->color = node->color;
+        replace->left = node->left;
+        node->left->parent = replace;
+        if(color == BLACK){
+            deleteFixUp(root, child, tmpParent);
+        }
+        free(node);
+
+        return ;
+    }
+    if(node->left != NULL){
+        child = node->left;
+    }else{
+        child = node->right;
+    }
+    parent = node->parent;
+    color = node->color;
+    if(child != NULL){
+        child->parent = tmpParent;
+    }
+    if(parent != NULL){
+        if(parent->left == node){
+            parent->left = child;
+        }else{
+            parent->right = child;
+        }
+    }else{
+        root->node = child;
+    }
+    if(color == BLACK){
+        deleteFixUp(root, child, tmpParent);
+    }
+    free(node);
+}
+
+void deleteFixUp(RbRoot *root, Node *node, Node *parent){
+
+}
+
+```
